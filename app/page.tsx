@@ -121,22 +121,28 @@ const sendMessage = async () => {
 
     try {
       const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-  messages: updatedMessages,
-}),
-      });
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    messages: updatedMessages,
+  }),
+});
 
-      const data = await res.json();
+const reader = res.body?.getReader();
 
-      const finalMessages = [
+if (!reader) {
+  throw new Error("No stream");
+}
+
+let assistantText = "";
+
+const streamingMessages = [
   ...updatedMessages,
   {
     role: "assistant" as const,
-    content: data.reply,
+    content: "",
   },
 ];
 
@@ -144,16 +150,49 @@ setChats((prev) =>
   prev.map((chat) =>
     chat.id === activeChatId
       ? {
-    ...chat,
-    title:
-  chat.messages.length <= 1
-    ? userMessage.slice(0, 30)
-    : chat.title,
-    messages: finalMessages,
-  }
+          ...chat,
+          title:
+            chat.messages.length <= 1
+              ? userMessage.slice(0, 30)
+              : chat.title,
+          messages: streamingMessages,
+        }
       : chat
   )
 );
+
+let chunkCount = 0;
+while (true) {
+  const { done, value } = await reader.read();
+
+  if (done) break;
+
+  console.log("received chunk");
+
+  
+  assistantText += new TextDecoder().decode(value);
+chunkCount++;
+
+if (chunkCount % 10 !== 0) continue;
+
+  setChats((prev) =>
+  prev.map((chat) => {
+    if (chat.id !== activeChatId) return chat;
+
+    const msgs = [...chat.messages];
+
+    msgs[msgs.length - 1] = {
+      role: "assistant",
+      content: assistantText,
+    };
+
+    return {
+      ...chat,
+      messages: msgs,
+    };
+  })
+);
+}
     } catch {
       const errorMessages = [
   ...updatedMessages,

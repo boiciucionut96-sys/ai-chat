@@ -1,3 +1,4 @@
+export const runtime = "nodejs";
 import OpenAI from "openai";
 
 const client = new OpenAI({
@@ -8,23 +9,44 @@ export async function POST(req: Request) {
   try {
     const { messages } = await req.json();
 
-    const response = await client.responses.create({
-  model: "gpt-5-nano",
-  input: [
-  {
-    role: "system",
-    content:
-      "You are a helpful AI assistant. Format all code using markdown code blocks.",
-  },
-  ...messages.map((msg: any) => ({
-    role: msg.role,
-    content: msg.content,
-  })),
-],
-});
+    const stream = await client.responses.create({
+      model: "gpt-5-nano",
+      stream: true,
+      input: [
+        {
+          role: "system",
+          content:
+            "You are a helpful AI assistant. Format all code using markdown code blocks.",
+        },
+        ...messages.map((msg: any) => ({
+          role: msg.role,
+          content: msg.content,
+        })),
+      ],
+    });
 
-    return Response.json({
-      reply: response.output_text,
+    const encoder = new TextEncoder();
+
+    const readable = new ReadableStream({
+      async start(controller) {
+        for await (const event of stream) {
+  if (event.type === "response.output_text.delta") {
+    console.log("chunk:", event.delta);
+
+    controller.enqueue(
+      encoder.encode(event.delta)
+    );
+  }
+}
+
+        controller.close();
+      },
+    });
+
+    return new Response(readable, {
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+      },
     });
   } catch (error) {
     console.error(error);
