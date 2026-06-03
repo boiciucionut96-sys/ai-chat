@@ -152,9 +152,15 @@ setChats((prev) =>
       ? {
           ...chat,
           title:
-            chat.messages.length <= 1
-              ? userMessage.slice(0, 30)
-              : chat.title,
+  chat.messages.length <= 1
+    ? (
+        userMessage
+          .replace(/\n/g, " ")
+          .trim()
+          .slice(0, 40) +
+        (userMessage.length > 40 ? "..." : "")
+      )
+    : chat.title,
           messages: streamingMessages,
         }
       : chat
@@ -241,6 +247,7 @@ setChats((prev) =>
     {chats.map((chat) => (
   <div key={chat.id} className="flex gap-2">
     <button
+      title={chat.title}
       onClick={() => setActiveChatId(chat.id)}
       className={`flex-1 rounded-lg p-2 text-left ${
         activeChatId === chat.id
