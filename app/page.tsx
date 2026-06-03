@@ -126,8 +126,8 @@ const sendMessage = async () => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          message: userMessage,
-        }),
+  messages: updatedMessages,
+}),
       });
 
       const data = await res.json();

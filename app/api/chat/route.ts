@@ -6,18 +6,21 @@ const client = new OpenAI({
 
 export async function POST(req: Request) {
   try {
-    const { message } = await req.json();
+    const { messages } = await req.json();
 
     const response = await client.responses.create({
   model: "gpt-5-nano",
-  input: `
-You are a helpful AI assistant.
-
-Format all code using markdown code blocks.
-
-User:
-${message}
-`,
+  input: [
+  {
+    role: "system",
+    content:
+      "You are a helpful AI assistant. Format all code using markdown code blocks.",
+  },
+  ...messages.map((msg: any) => ({
+    role: msg.role,
+    content: msg.content,
+  })),
+],
 });
 
     return Response.json({
