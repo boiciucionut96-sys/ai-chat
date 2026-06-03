@@ -143,7 +143,14 @@ const sendMessage = async () => {
 setChats((prev) =>
   prev.map((chat) =>
     chat.id === activeChatId
-      ? { ...chat, messages: finalMessages }
+      ? {
+    ...chat,
+    title:
+  chat.messages.length <= 1
+    ? userMessage.slice(0, 30)
+    : chat.title,
+    messages: finalMessages,
+  }
       : chat
   )
 );
