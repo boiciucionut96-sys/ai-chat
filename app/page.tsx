@@ -1,6 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
+import { useState, useEffect, useRef } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+type Chat = {
+  id: string;
+  title: string;
+  messages: Message[];
+};
 
 type Message = {
   role: "user" | "assistant";
@@ -9,21 +18,104 @@ type Message = {
 
 export default function Home() {
   const [message, setMessage] = useState("");
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [chats, setChats] = useState<Chat[]>([]); 
+const [activeChatId, setActiveChatId] = useState("");
+const currentChat =
+  chats.find((chat) => chat.id === activeChatId) ||
+  chats[0] ||
+  {
+    id: "",
+    title: "",
+    messages: [],
+  };
   const [loading, setLoading] = useState(false);
 
-  const sendMessage = async () => {
+  const chatContainerRef = useRef<HTMLElement | null>(null);
+  // Load chats from localStorage
+useEffect(() => {
+  const savedChats = localStorage.getItem("chats");
+  const savedActiveChat = localStorage.getItem("activeChatId");
+
+  if (savedChats) {
+    setChats(JSON.parse(savedChats));
+  } else {
+    const firstChat = {
+      id: crypto.randomUUID(),
+      title: "New Chat",
+      messages: [],
+    };
+
+    setChats([firstChat]);
+    setActiveChatId(firstChat.id);
+  }
+
+  if (savedActiveChat) {
+    setActiveChatId(savedActiveChat);
+  }
+}, []);
+
+// Save chats
+useEffect(() => {
+  if (chats.length > 0) {
+    localStorage.setItem("chats", JSON.stringify(chats));
+  }
+}, [chats]);
+
+// Save active chat
+useEffect(() => {
+  if (activeChatId) {
+    localStorage.setItem("activeChatId", activeChatId);
+  }
+}, [activeChatId]);
+
+  useEffect(() => {
+  if (chats.length > 0 && !activeChatId) {
+    setActiveChatId(chats[0].id);
+  }
+}, [chats, activeChatId]);
+
+const deleteChat = (id: string) => {
+  const remaining = chats.filter((chat) => chat.id !== id);
+
+  if (remaining.length === 0) {
+    const firstChat = {
+      id: crypto.randomUUID(),
+      title: "New Chat",
+      messages: [],
+    };
+
+    setChats([firstChat]);
+    setActiveChatId(firstChat.id);
+    return;
+  }
+
+  setChats(remaining);
+
+  if (activeChatId === id) {
+    setActiveChatId(remaining[0].id);
+  }
+};
+
+const sendMessage = async () => {
     if (!message.trim() || loading) return;
 
+    const userMessage = message;
+
     const updatedMessages: Message[] = [
-      ...messages,
+  ...currentChat.messages,
       {
         role: "user",
-        content: message,
+        content: userMessage,
       },
     ];
 
-    setMessages(updatedMessages);
+    setChats((prev) =>
+  prev.map((chat) =>
+    chat.id === activeChatId
+      ? { ...chat, messages: updatedMessages }
+      : chat
+  )
+);
     setMessage("");
     setLoading(true);
 
@@ -34,82 +126,161 @@ export default function Home() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          messages: updatedMessages,
+          message: userMessage,
         }),
       });
 
       const data = await res.json();
 
-      setMessages([
-        ...updatedMessages,
-        {
-          role: "assistant",
-          content: data.reply,
-        },
-      ]);
+      const finalMessages = [
+  ...updatedMessages,
+  {
+    role: "assistant" as const,
+    content: data.reply,
+  },
+];
+
+setChats((prev) =>
+  prev.map((chat) =>
+    chat.id === activeChatId
+      ? { ...chat, messages: finalMessages }
+      : chat
+  )
+);
     } catch {
-      setMessages([
-        ...updatedMessages,
-        {
-          role: "assistant",
-          content: "Sorry, something went wrong.",
-        },
-      ]);
-    } finally {
-      setLoading(false);
+      const errorMessages = [
+  ...updatedMessages,
+  {
+    role: "assistant" as const,
+    content: "Error contacting server.",
+  },
+];
+
+setChats((prev) =>
+  prev.map((chat) =>
+    chat.id === activeChatId
+      ? { ...chat, messages: errorMessages }
+      : chat
+  )
+);
     }
+
+    setLoading(false);
   };
 
   const newChat = () => {
-    setMessages([]);
-    setMessage("");
+  const chat = {
+    id: crypto.randomUUID(),
+    title: `Chat ${chats.length + 1}`,
+    messages: [],
   };
 
-  return (
-    <div className="h-screen bg-[#212121] text-white flex">
-      <aside className="w-64 bg-[#171717] border-r border-zinc-800 p-3">
-        <button
-          onClick={newChat}
-          className="w-full rounded-lg bg-zinc-800 p-3 text-left hover:bg-zinc-700 transition"
-        >
-          + New Chat
-        </button>
-      </aside>
+  setChats((prev) => [...prev, chat]);
+  setActiveChatId(chat.id);
+  setMessage("");
+};
 
-      <div className="flex flex-col flex-1">
-        <header className="p-4 border-b border-zinc-800 font-semibold">
+  return (
+    <div className="flex h-screen bg-[#202123] text-white">
+      {/* Sidebar */}
+<aside className="w-64 bg-[#171717] border-r border-zinc-800 p-3">
+  <button
+    onClick={newChat}
+    className="w-full rounded-lg border border-zinc-700 p-3 text-left hover:bg-zinc-800"
+  >
+    + New Chat
+  </button>
+
+  <div className="mt-4 space-y-2">
+    {chats.map((chat) => (
+  <div key={chat.id} className="flex gap-2">
+    <button
+      onClick={() => setActiveChatId(chat.id)}
+      className={`flex-1 rounded-lg p-2 text-left ${
+        activeChatId === chat.id
+          ? "bg-zinc-700"
+          : "bg-zinc-800"
+      }`}
+    >
+      {chat.title}
+    </button>
+
+    <button
+      onClick={() => deleteChat(chat.id)}
+      className="rounded-lg bg-red-600 px-2 hover:bg-red-700"
+    >
+      ×
+    </button>
+  </div>
+))}
+  </div>
+</aside>
+
+      {/* Main Area */}
+      <div className="flex flex-1 flex-col">
+        <header className="border-b border-zinc-800 p-4 font-semibold">
           AI Chat
         </header>
 
-        <main className="flex-1 overflow-y-auto">
-          <div className="max-w-4xl mx-auto p-4">
-            {messages.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-[70vh] text-center">
-                <h1 className="text-5xl font-bold mb-4">
-                  AI Chat
-                </h1>
-
-                <p className="text-zinc-400 text-lg">
-                  Ask me anything.
-                </p>
+        <main
+          ref={chatContainerRef}
+          className="flex-1 overflow-y-auto p-6"
+        >
+          <div className="max-w-4xl mx-auto">
+            {currentChat.messages.length === 0 ? (
+              <div className="flex justify-center items-center h-full">
+                <div className="text-center mt-40">
+                  <h1 className="text-5xl font-bold mb-3">
+                    AI Chat
+                  </h1>
+                  <p className="text-zinc-400">
+                    Ask me anything.
+                  </p>
+                </div>
               </div>
             ) : (
               <>
-                {messages.map((msg, index) => (
-                  <div
-                    key={index}
-                    className={`mb-4 p-4 rounded-2xl max-w-[80%] break-words ${
-                      msg.role === "user"
-                        ? "bg-[#2f67f6] ml-auto"
-                        : "bg-[#303030]"
-                    }`}
-                  >
-                    {msg.content}
-                  </div>
-                ))}
+                {currentChat.messages.map((msg, index) => (
+  <div
+    key={index}
+    className={`mb-4 p-4 rounded-2xl max-w-3xl break-words ${
+      msg.role === "user"
+        ? "bg-[#2f67f6] ml-auto"
+        : "bg-[#303030]"
+    }`}
+  >
+    <div className="prose prose-invert max-w-none">
+      <ReactMarkdown
+  remarkPlugins={[remarkGfm]}
+  components={{
+    code({ className, children, ...props }: any) {
+      const match = /language-(\w+)/.exec(className || "");
+
+      return match ? (
+        <SyntaxHighlighter
+          style={oneDark}
+          language={match[1]}
+          PreTag="div"
+          {...props}
+        >
+          {String(children).replace(/\n$/, "")}
+        </SyntaxHighlighter>
+      ) : (
+        <code className={className} {...props}>
+          {children}
+        </code>
+      );
+    },
+  }}
+>
+  {msg.content}
+</ReactMarkdown>
+    </div>
+  </div>
+))}
 
                 {loading && (
-                  <div className="bg-[#303030] p-4 rounded-2xl max-w-[80%]">
+                  <div className="bg-[#303030] p-4 rounded-2xl max-w-3xl">
                     AI is thinking...
                   </div>
                 )}
@@ -135,7 +306,7 @@ export default function Home() {
             <button
               onClick={sendMessage}
               disabled={loading}
-              className="rounded-xl bg-[#2f67f6] px-6 hover:opacity-90 transition disabled:opacity-50"
+              className="rounded-xl bg-[#2f67f6] px-6 hover:opacity-90 disabled:opacity-50"
             >
               Send
             </button>
