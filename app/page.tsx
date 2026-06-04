@@ -192,12 +192,31 @@ const continueConversation = async (messages: Message[]) => {
 
 const userMessage = message;
 
+if (
+  currentChat.title === "New Chat" &&
+  userMessage.trim()
+) {
+  const title =
+    userMessage.length > 30
+      ? userMessage.slice(0, 30) + "..."
+      : userMessage;
+
+  setChats((prev) =>
+    prev.map((chat) =>
+      chat.id === activeChatId
+        ? { ...chat, title }
+        : chat
+    )
+  );
+}
+
     const updatedMessages: Message[] = [
   ...currentChat.messages,
       {
         role: "user",
         content: userMessage,
       },
+      
     ];
 
     setChats((prev) =>
@@ -630,8 +649,25 @@ setTimeout(() => {
 />
 
 {selectedFile && (
-  <div className="text-xs text-zinc-400">
-    📎 {selectedFile.name}
+  <div className="flex items-center gap-2">
+    {selectedFile.type.startsWith("image/") ? (
+      <img
+        src={URL.createObjectURL(selectedFile)}
+        alt="preview"
+        className="h-16 w-16 rounded object-cover"
+      />
+    ) : (
+      <div className="text-xs text-zinc-400">
+        📄 {selectedFile.name}
+      </div>
+    )}
+
+    <button
+      onClick={() => setSelectedFile(null)}
+      className="rounded bg-red-600 px-2 py-1 text-xs"
+    >
+      ✕
+    </button>
   </div>
 )}
 
