@@ -17,9 +17,52 @@ type Message = {
 };
 
 export default function Home() {
+    const stopGeneration = () => {
+  abortController?.abort();
+  setLoading(false);
+  setAbortController(null);
+};
   const [message, setMessage] = useState("");
   const [chats, setChats] = useState<Chat[]>([]); 
-const [activeChatId, setActiveChatId] = useState("");
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  
+
+const regenerateResponse = async () => {
+  if (!currentChat) return;
+
+  const messagesWithoutLastAssistant =
+    currentChat.messages[currentChat.messages.length - 1]?.role === "assistant"
+      ? currentChat.messages.slice(0, -1)
+      : currentChat.messages;
+
+  setChats((prev) =>
+    prev.map((chat) =>
+      chat.id === activeChatId
+        ? {
+            ...chat,
+            messages: messagesWithoutLastAssistant,
+          }
+        : chat
+    )
+  );
+
+  const lastUserMessage = [...messagesWithoutLastAssistant]
+    .reverse()
+    .find((m) => m.role === "user");
+
+  if (!lastUserMessage) return;
+
+  setMessage(lastUserMessage.content);
+
+setTimeout(() => {
+  const sendBtn = document.querySelector(
+    'button[class*="bg-blue"]'
+  ) as HTMLButtonElement | null;
+
+  sendBtn?.click();
+}, 100);
+};      const [activeChatId, setActiveChatId] = useState("");
+const [model, setModel] = useState("gpt-5-nano");
 const currentChat =
   chats.find((chat) => chat.id === activeChatId) ||
   chats[0] ||
@@ -29,13 +72,35 @@ const currentChat =
     messages: [],
   };
   const [loading, setLoading] = useState(false);
+  const [abortController, setAbortController] =
+  useState<AbortController | null>(null);
 
   const chatContainerRef = useRef<HTMLElement | null>(null);
+  const bottomRef = useRef<HTMLDivElement | null>(null);
+
+  const renameChat = (id: string) => {
+    const newTitle = prompt("New chat title:");
+
+    if (!newTitle) return;
+
+    setChats((prev) =>
+      prev.map((chat) =>
+        chat.id === id
+          ? { ...chat, title: newTitle }
+          : chat
+      )
+    );
+  };
+
   // Load chats from localStorage
 useEffect(() => {
   const savedChats = localStorage.getItem("chats");
   const savedActiveChat = localStorage.getItem("activeChatId");
 
+   if (chatContainerRef.current) {
+    chatContainerRef.current.scrollTop =
+      chatContainerRef.current.scrollHeight;
+  }
   if (savedChats) {
     setChats(JSON.parse(savedChats));
   } else {
@@ -61,6 +126,12 @@ useEffect(() => {
   }
 }, [chats]);
 
+useEffect(() => {
+  bottomRef.current?.scrollIntoView({
+    behavior: "smooth",
+  });
+}, [chats]);
+
 // Save active chat
 useEffect(() => {
   if (activeChatId) {
@@ -75,6 +146,7 @@ useEffect(() => {
 }, [chats, activeChatId]);
 
 const deleteChat = (id: string) => {
+    
   const remaining = chats.filter((chat) => chat.id !== id);
 
   if (remaining.length === 0) {
@@ -98,8 +170,14 @@ const deleteChat = (id: string) => {
 
 const sendMessage = async () => {
     if (!message.trim() || loading) return;
+    const stopGeneration = () => {
+  abortController?.abort();
+  setLoading(false);
+  setAbortController(null);
+};
 
-    const userMessage = message;
+
+const userMessage = message;
 
     const updatedMessages: Message[] = [
   ...currentChat.messages,
@@ -119,15 +197,19 @@ const sendMessage = async () => {
     setMessage("");
     setLoading(true);
 
+    const controller = new AbortController();
+setAbortController(controller);
     try {
       const res = await fetch("/api/chat", {
   method: "POST",
   headers: {
     "Content-Type": "application/json",
   },
+  signal: controller.signal,
   body: JSON.stringify({
-    messages: updatedMessages,
-  }),
+  messages: updatedMessages,
+  model,
+}),
 });
 
 const reader = res.body?.getReader();
@@ -179,7 +261,7 @@ while (true) {
   assistantText += new TextDecoder().decode(value);
 chunkCount++;
 
-if (chunkCount % 10 !== 0) continue;
+if (chunkCount % 5 !== 0) continue;
 
   setChats((prev) =>
   prev.map((chat) => {
@@ -199,25 +281,32 @@ if (chunkCount % 10 !== 0) continue;
   })
 );
 }
-    } catch {
-      const errorMessages = [
-  ...updatedMessages,
-  {
-    role: "assistant" as const,
-    content: "Error contacting server.",
-  },
-];
+    } catch (error: any) {
+  if (error.name === "AbortError") {
+  setLoading(false);
+  setAbortController(null);
+  return;
+}
 
-setChats((prev) =>
-  prev.map((chat) =>
-    chat.id === activeChatId
-      ? { ...chat, messages: errorMessages }
-      : chat
-  )
-);
-    }
+  const errorMessages = [
+    ...updatedMessages,
+    {
+      role: "assistant" as const,
+      content: "Error contacting server.",
+    },
+  ];
+
+  setChats((prev) =>
+    prev.map((chat) =>
+      chat.id === activeChatId
+        ? { ...chat, messages: errorMessages }
+        : chat
+    )
+  );
+}
 
     setLoading(false);
+    setAbortController(null);
   };
 
   const newChat = () => {
@@ -235,7 +324,12 @@ setChats((prev) =>
   return (
     <div className="flex h-screen bg-[#202123] text-white">
       {/* Sidebar */}
-<aside className="w-64 bg-[#171717] border-r border-zinc-800 p-3">
+<aside
+  className={`${
+    sidebarOpen ? "w-64" : "w-0"
+  } overflow-hidden bg-[#171717] border-r border-zinc-800 transition-all duration-300`}
+>
+  <div className="p-3">
   <button
     onClick={newChat}
     className="w-full rounded-lg border border-zinc-700 p-3 text-left hover:bg-zinc-800"
@@ -259,6 +353,13 @@ setChats((prev) =>
     </button>
 
     <button
+  onClick={() => renameChat(chat.id)}
+  className="rounded-lg bg-zinc-700 px-2 hover:bg-zinc-600"
+>
+  ✏️
+</button>
+
+    <button
       onClick={() => deleteChat(chat.id)}
       className="rounded-lg bg-red-600 px-2 hover:bg-red-700"
     >
@@ -267,13 +368,33 @@ setChats((prev) =>
   </div>
 ))}
   </div>
+  </div>
 </aside>
 
       {/* Main Area */}
       <div className="flex flex-1 flex-col">
-        <header className="border-b border-zinc-800 p-4 font-semibold">
-          AI Chat
-        </header>
+        <header className="flex items-center justify-between border-b border-zinc-800 p-4">
+  <div className="flex items-center gap-3">
+    <button
+      onClick={() => setSidebarOpen(!sidebarOpen)}
+      className="rounded p-2 hover:bg-zinc-800"
+    >
+      ☰
+    </button>
+
+    <h1 className="font-semibold">AI Chat</h1>
+  </div>
+
+  <select
+    value={model}
+    onChange={(e) => setModel(e.target.value)}
+    className="rounded bg-zinc-800 px-3 py-1 text-sm"
+  >
+    <option value="gpt-5">GPT-5</option>
+    <option value="gpt-5-mini">GPT-5 Mini</option>
+    <option value="gpt-5-nano">GPT-5 Nano</option>
+  </select>
+</header>
 
         <main
           ref={chatContainerRef}
@@ -294,6 +415,8 @@ setChats((prev) =>
             ) : (
               <>
                 {currentChat.messages.map((msg, index) => (
+                    
+  
   <div
     key={index}
     className={`mb-4 p-4 rounded-2xl max-w-3xl break-words ${
@@ -302,33 +425,47 @@ setChats((prev) =>
         : "bg-[#303030]"
     }`}
   >
-    <div className="prose prose-invert max-w-none">
-      <ReactMarkdown
-  remarkPlugins={[remarkGfm]}
-  components={{
-    code({ className, children, ...props }: any) {
-      const match = /language-(\w+)/.exec(className || "");
-
-      return match ? (
-        <SyntaxHighlighter
-          style={oneDark}
-          language={match[1]}
-          PreTag="div"
-          {...props}
-        >
-          {String(children).replace(/\n$/, "")}
-        </SyntaxHighlighter>
-      ) : (
-        <code className={className} {...props}>
-          {children}
-        </code>
-      );
-    },
-  }}
->
+    <div>
   {msg.content}
-</ReactMarkdown>
-    </div>
+</div>
+    <div className="prose prose-invert max-w-none">
+  <ReactMarkdown
+    remarkPlugins={[remarkGfm]}
+    components={{
+      code({ className, children, ...props }: any) {
+        const match = /language-(\w+)/.exec(className || "");
+
+        return match ? (
+          <SyntaxHighlighter
+            style={oneDark}
+            language={match[1]}
+            PreTag="div"
+            {...props}
+          >
+            {String(children).replace(/\n$/, "")}
+          </SyntaxHighlighter>
+        ) : (
+          <code className={className} {...props}>
+            {children}
+          </code>
+        );
+      },
+    }}
+  >
+    {msg.content}
+  </ReactMarkdown>
+
+  {msg.role === "assistant" &&
+    index === currentChat.messages.length - 1 &&
+    !loading && (
+      <button
+        onClick={regenerateResponse}
+        className="mt-3 text-xs text-zinc-400 hover:text-white"
+      >
+        🔄 Regenerate
+      </button>
+    )}
+</div>
   </div>
 ))}
 
@@ -339,6 +476,7 @@ setChats((prev) =>
                 )}
               </>
             )}
+             <div ref={bottomRef} />
           </div>
         </main>
 
@@ -356,13 +494,21 @@ setChats((prev) =>
               }}
             />
 
-            <button
-              onClick={sendMessage}
-              disabled={loading}
-              className="rounded-xl bg-[#2f67f6] px-6 hover:opacity-90 disabled:opacity-50"
-            >
-              Send
-            </button>
+            {loading ? (
+  <button
+    onClick={stopGeneration}
+    className="rounded-lg bg-red-600 px-4 hover:bg-red-700"
+  >
+    Stop
+  </button>
+) : (
+  <button
+    onClick={sendMessage}
+    className="rounded-lg bg-blue-600 px-4 hover:bg-blue-700"
+  >
+    Send
+  </button>
+)}
           </div>
         </div>
       </div>

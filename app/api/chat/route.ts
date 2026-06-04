@@ -7,10 +7,10 @@ const client = new OpenAI({
 
 export async function POST(req: Request) {
   try {
-    const { messages } = await req.json();
+    const { messages, model } = await req.json();
 
     const stream = await client.responses.create({
-      model: "gpt-5-nano",
+      model: model || "gpt-5-nano",
       stream: true,
       input: [
         {
