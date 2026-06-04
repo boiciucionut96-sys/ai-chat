@@ -301,12 +301,19 @@ if (chunkCount % 5 !== 0) continue;
   })
 );
 }
+setSelectedFile(null);
+console.log("SUCCESS FILE CLEARED");
     } catch (error: any) {
   if (error.name === "AbortError") {
+  setSelectedFile(null);
+  console.log("FILE CLEARED");
+
   setLoading(false);
   setAbortController(null);
   return;
 }
+setLoading(false);
+setAbortController(null);
 
   const errorMessages = [
     ...updatedMessages,
