@@ -25,6 +25,13 @@ export default function Home() {
   const [message, setMessage] = useState("");
   const [chats, setChats] = useState<Chat[]>([]); 
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [search, setSearch] = useState("");
+  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+const [editingText, setEditingText] = useState("");
+const [renamingChatId, setRenamingChatId] = useState<string | null>(null);
+const [renameValue, setRenameValue] = useState("");
+const [selectedFile, setSelectedFile] = useState<File | null>(null);
   
 
 const regenerateResponse = async () => {
@@ -79,18 +86,20 @@ const currentChat =
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   const renameChat = (id: string) => {
-    const newTitle = prompt("New chat title:");
+  const newTitle = window.prompt("New chat title:");
 
-    if (!newTitle) return;
+  if (newTitle === null || newTitle.trim() === "") {
+    return;
+  }
 
-    setChats((prev) =>
-      prev.map((chat) =>
-        chat.id === id
-          ? { ...chat, title: newTitle }
-          : chat
-      )
-    );
-  };
+  setChats((prev) =>
+    prev.map((chat) =>
+      chat.id === id
+        ? { ...chat, title: newTitle.trim() }
+        : chat
+    )
+  );
+};
 
   // Load chats from localStorage
 useEffect(() => {
@@ -176,6 +185,10 @@ const sendMessage = async () => {
   setAbortController(null);
 };
 
+const continueConversation = async (messages: Message[]) => {
+  // same fetch logic as sendMessage
+};
+
 
 const userMessage = message;
 
@@ -198,18 +211,25 @@ const userMessage = message;
     setLoading(true);
 
     const controller = new AbortController();
-setAbortController(controller);
+const formData = new FormData();
+
+formData.append(
+  "messages",
+  JSON.stringify(updatedMessages)
+);
+
+formData.append("model", model);
+
+if (selectedFile) {
+  formData.append("file", selectedFile);
+}
+    setAbortController(controller);
     try {
       const res = await fetch("/api/chat", {
   method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-  },
+ 
   signal: controller.signal,
-  body: JSON.stringify({
-  messages: updatedMessages,
-  model,
-}),
+  body: formData,
 });
 
 const reader = res.body?.getReader();
@@ -337,8 +357,19 @@ if (chunkCount % 5 !== 0) continue;
     + New Chat
   </button>
 
+  <input
+    value={search}
+    onChange={(e) => setSearch(e.target.value)}
+    placeholder="Search chats..."
+    className="mt-2 w-full rounded-lg bg-zinc-800 p-2 text-sm"
+  />
+
   <div className="mt-4 space-y-2">
-    {chats.map((chat) => (
+    {chats
+  .filter((chat) =>
+    chat.title.toLowerCase().includes(search.toLowerCase())
+  )
+  .map((chat) => (
   <div key={chat.id} className="flex gap-2">
     <button
       title={chat.title}
@@ -349,11 +380,35 @@ if (chunkCount % 5 !== 0) continue;
           : "bg-zinc-800"
       }`}
     >
-      {chat.title}
+      {renamingChatId === chat.id ? (
+  <input
+  value={renameValue}
+  onChange={(e) => setRenameValue(e.target.value)}
+  className="w-full bg-zinc-700 rounded p-1 text-sm"
+  onKeyDown={(e) => {
+    if (e.key === "Enter") {
+      setChats((prev) =>
+        prev.map((c) =>
+          c.id === chat.id
+            ? { ...c, title: renameValue }
+            : c
+        )
+      );
+
+      setRenamingChatId(null);
+    }
+  }}
+/>
+) : (
+  chat.title
+)}
     </button>
 
     <button
-  onClick={() => renameChat(chat.id)}
+  onClick={() => {
+  setRenamingChatId(chat.id);
+  setRenameValue(chat.title);
+}}
   className="rounded-lg bg-zinc-700 px-2 hover:bg-zinc-600"
 >
   ✏️
@@ -425,8 +480,60 @@ if (chunkCount % 5 !== 0) continue;
         : "bg-[#303030]"
     }`}
   >
+   <div>
+  {editingIndex === index ? (
     <div>
-  {msg.content}
+      <textarea
+        value={editingText}
+        onChange={(e) => setEditingText(e.target.value)}
+        className="w-full rounded bg-zinc-800 p-2 text-white"
+      />
+
+      <div className="mt-2 flex gap-2">
+        <button
+ onClick={() => {
+  setChats((prev) =>
+    prev.map((chat) => {
+      if (chat.id !== activeChatId) return chat;
+
+      const updated = [...chat.messages];
+
+      updated[index] = {
+        ...updated[index],
+        content: editingText,
+      };
+
+      return {
+        ...chat,
+        messages: updated.slice(0, index + 1),
+      };
+    })
+  );
+
+  setEditingIndex(null);
+
+  setEditingIndex(null);
+
+setTimeout(() => {
+  sendMessage();
+}, 100);
+}}
+  className="rounded bg-green-600 px-2 py-1"
+>
+  Save
+</button>
+
+        <button
+          onClick={() => setEditingIndex(null)}
+          className="rounded bg-zinc-600 px-2 py-1"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  ) : (
+    msg.content
+  )}
 </div>
     <div className="prose prose-invert max-w-none">
   <ReactMarkdown
@@ -455,9 +562,34 @@ if (chunkCount % 5 !== 0) continue;
     {msg.content}
   </ReactMarkdown>
 
-  {msg.role === "assistant" &&
-    index === currentChat.messages.length - 1 &&
-    !loading && (
+{msg.role === "user" && (
+  <button
+    onClick={() => {
+      setEditingIndex(index);
+      setEditingText(msg.content);
+    }}
+    className="mt-2 mr-3 text-xs text-zinc-400 hover:text-white"
+  >
+    ✏️ Edit
+  </button>
+)}
+
+{msg.role === "assistant" && (
+  <button
+  onClick={() => {
+    navigator.clipboard.writeText(msg.content);
+    setCopiedIndex(index);
+
+    setTimeout(() => {
+      setCopiedIndex(null);
+    }, 2000);
+  }}
+  className="mt-2 mr-3 text-xs text-zinc-400 hover:text-white"
+>
+  {copiedIndex === index ? "✓ Copied" : "📋 Copy"}
+</button>
+)}
+{!loading && (
       <button
         onClick={regenerateResponse}
         className="mt-3 text-xs text-zinc-400 hover:text-white"
@@ -481,18 +613,41 @@ if (chunkCount % 5 !== 0) continue;
         </main>
 
         <div className="border-t border-zinc-800 p-4">
-          <div className="max-w-4xl mx-auto flex gap-2">
-            <input
-              className="flex-1 rounded-xl bg-[#303030] p-4 outline-none"
-              placeholder="Message AI Chat..."
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  sendMessage();
-                }
-              }}
-            />
+  <div className="max-w-4xl mx-auto flex gap-2">
+
+    <input
+  type="file"
+  onChange={(e) => {
+    setSelectedFile(e.target.files?.[0] || null);
+  }}
+/>
+
+{selectedFile && (
+  <div className="text-xs text-zinc-400">
+    📎 {selectedFile.name}
+  </div>
+)}
+
+    <textarea
+  className="flex-1 rounded-xl bg-[#303030] p-4 outline-none resize-none"
+  placeholder="Message AI Chat..."
+  value={message}
+  rows={1}
+  onChange={(e) => setMessage(e.target.value)}
+  onKeyDown={(e) => {
+  if (e.key === "Enter") {
+    setChats((prev) =>
+      prev.map((c) =>
+        c.id === renamingChatId
+          ? { ...c, title: renameValue }
+          : c
+      )
+    );
+
+    setRenamingChatId(null);
+  }
+}}
+/>
 
             {loading ? (
   <button

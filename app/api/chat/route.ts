@@ -7,7 +7,23 @@ const client = new OpenAI({
 
 export async function POST(req: Request) {
   try {
-    const { messages, model } = await req.json();
+    const formData = await req.formData();
+
+const messages = JSON.parse(
+  formData.get("messages") as string
+);
+
+const model = formData.get("model") as string;
+
+const file = formData.get("file") as File | null;
+let fileContent = "";
+
+if (file && file.type === "text/plain") {
+  fileContent = await file.text();
+}
+console.log("file:", file?.name);
+console.log("type:", file?.type);
+console.log("size:", file?.size);
 
     const stream = await client.responses.create({
       model: model || "gpt-5-nano",
@@ -18,6 +34,14 @@ export async function POST(req: Request) {
           content:
             "You are a helpful AI assistant. Format all code using markdown code blocks.",
         },
+        ...(fileContent
+  ? [
+      {
+        role: "system",
+        content: `Uploaded file contents:\n\n${fileContent}`,
+      },
+    ]
+  : []),
         ...messages.map((msg: any) => ({
           role: msg.role,
           content: msg.content,
