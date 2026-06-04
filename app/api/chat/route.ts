@@ -1,3 +1,4 @@
+
 export const runtime = "nodejs";
 import OpenAI from "openai";
 
@@ -16,38 +17,66 @@ const messages = JSON.parse(
 const model = formData.get("model") as string;
 
 const file = formData.get("file") as File | null;
+
 let fileContent = "";
 
 if (file && file.type === "text/plain") {
   fileContent = await file.text();
 }
-console.log("file:", file?.name);
-console.log("type:", file?.type);
-console.log("size:", file?.size);
 
-    const stream = await client.responses.create({
-      model: model || "gpt-5-nano",
-      stream: true,
-      input: [
-        {
-          role: "system",
-          content:
-            "You are a helpful AI assistant. Format all code using markdown code blocks.",
-        },
-        ...(fileContent
-  ? [
+const isImage =
+  file && file.type.startsWith("image/");
+
+let imageBase64 = "";
+
+if (isImage && file) {
+  const bytes = await file.arrayBuffer();
+
+  imageBase64 = Buffer.from(bytes).toString("base64");
+}
+
+const inputMessages: any[] = [
+  {
+    role: "system",
+    content:
+      "You are a helpful AI assistant. Format all code using markdown code blocks.",
+  },
+];
+
+if (fileContent) {
+  inputMessages.push({
+    role: "system",
+    content: `Uploaded file contents:\n\n${fileContent}`,
+  });
+}
+if (imageBase64 && file) {
+  inputMessages.push({
+    role: "user",
+    content: [
       {
-        role: "system",
-        content: `Uploaded file contents:\n\n${fileContent}`,
+        type: "input_text",
+        text: "Analyze this image.",
       },
-    ]
-  : []),
-        ...messages.map((msg: any) => ({
-          role: msg.role,
-          content: msg.content,
-        })),
-      ],
-    });
+      {
+        type: "input_image",
+        image_url: `data:${file.type};base64,${imageBase64}`,
+      },
+    ],
+  });
+}
+
+inputMessages.push(
+  ...messages.map((msg: any) => ({
+    role: msg.role,
+    content: msg.content,
+  }))
+);
+
+const stream = await client.responses.create({
+  model: model || "gpt-5-nano",
+  stream: true,
+  input: inputMessages,
+});
 
     const encoder = new TextEncoder();
 
