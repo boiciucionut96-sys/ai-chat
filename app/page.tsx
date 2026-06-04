@@ -454,7 +454,7 @@ setAbortController(null);
 
       {/* Main Area */}
       <div className="flex flex-1 flex-col">
-        <header className="flex items-center justify-between border-b border-zinc-800 p-4">
+       <header className="flex items-center justify-between border-b border-zinc-800 p-4">
   <div className="flex items-center gap-3">
     <button
       onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -463,9 +463,14 @@ setAbortController(null);
       ☰
     </button>
 
-    <h1 className="font-semibold">AI Chat</h1>
+    <div className="text-xl">⚡</div>
+
+    <h1 className="font-semibold">
+      RazorswitchGPT
+    </h1>
   </div>
 
+  {/* model selector */}
   <select
     value={model}
     onChange={(e) => setModel(e.target.value)}
@@ -486,11 +491,12 @@ setAbortController(null);
               <div className="flex justify-center items-center h-full">
                 <div className="text-center mt-40">
                   <h1 className="text-5xl font-bold mb-3">
-                    AI Chat
-                  </h1>
-                  <p className="text-zinc-400">
-                    Ask me anything.
-                  </p>
+  RazorswitchGPT
+</h1>
+
+<p className="text-zinc-400">
+  Your personal AI assistant.
+</p>
                 </div>
               </div>
             ) : (

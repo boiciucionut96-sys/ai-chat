@@ -1,8 +1,8 @@
 import "./globals.css";
 
 export const metadata = {
-  title: "AI Chat",
-  description: "My AI chatbot",
+  title: "RazorswitchGPT",
+  description: "Personal AI Assistant",
 };
 
 export default function RootLayout({
