@@ -294,10 +294,13 @@ useEffect(() => {
 
 // Save chats
 useEffect(() => {
-  if (chats.length > 0) {
-    localStorage.setItem("chats", JSON.stringify(chats));
+  if (!user && chats.length > 0) {
+    localStorage.setItem(
+      "chats",
+      JSON.stringify(chats)
+    );
   }
-}, [chats]);
+}, [chats, user]);
 
 useEffect(() => {
   bottomRef.current?.scrollIntoView({
@@ -307,10 +310,13 @@ useEffect(() => {
 
 // Save active chat
 useEffect(() => {
-  if (activeChatId) {
-    localStorage.setItem("activeChatId", activeChatId);
+  if (!user && activeChatId) {
+    localStorage.setItem(
+      "activeChatId",
+      activeChatId
+    );
   }
-}, [activeChatId]);
+}, [activeChatId, user]);
 
   useEffect(() => {
   if (chats.length > 0 && !activeChatId) {
