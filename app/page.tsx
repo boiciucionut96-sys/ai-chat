@@ -96,9 +96,9 @@ const clearSelectedFiles = () => {
 };
 
 const handleLogout = async () => {
-  await supabase.auth.signOut();
+  localStorage.clear();
 
-  setUser(null);
+  await supabase.auth.signOut();
 
   window.location.reload();
 };
@@ -111,9 +111,17 @@ const handleUpgrade = async () => {
     }
   );
 
+  if (!res.ok) {
   const data = await res.json();
 
-  window.location.href = data.url;
+  alert(
+    data.error ||
+      "Daily limit reached"
+  );
+
+  setLoading(false);
+  return;
+}
 };
   
 
@@ -334,6 +342,10 @@ const sendMessage = async () => {
       signal: controller.signal,
       body: formData,
     });
+    if (res.status === 401) {
+  alert("Please sign in first.");
+  return;
+}
 
     const reader = res.body?.getReader();
 
@@ -372,35 +384,48 @@ const sendMessage = async () => {
       )
     );
 
-    let chunkCount = 0;
     while (true) {
-      const { done, value } = await reader.read();
+  const { done, value } = await reader.read();
 
-      if (done) break;
+  if (done) break;
 
-      assistantText += new TextDecoder().decode(value);
-      chunkCount++;
+  assistantText += new TextDecoder().decode(value);
 
-      if (chunkCount % 5 !== 0) continue;
+  setChats((prev) =>
+    prev.map((chat) => {
+      if (chat.id !== activeChatId) return chat;
 
-      setChats((prev) =>
-        prev.map((chat) => {
-          if (chat.id !== activeChatId) return chat;
+      const msgs = [...chat.messages];
 
-          const msgs = [...chat.messages];
+      msgs[msgs.length - 1] = {
+        role: "assistant",
+        content: assistantText,
+      };
 
-          msgs[msgs.length - 1] = {
-            role: "assistant",
-            content: assistantText,
-          };
+      return {
+        ...chat,
+        messages: msgs,
+      };
+    })
+  );
+}
+setChats((prev) =>
+  prev.map((chat) => {
+    if (chat.id !== activeChatId) return chat;
 
-          return {
-            ...chat,
-            messages: msgs,
-          };
-        })
-      );
-    }
+    const msgs = [...chat.messages];
+
+    msgs[msgs.length - 1] = {
+      role: "assistant",
+      content: assistantText,
+    };
+
+    return {
+      ...chat,
+      messages: msgs,
+    };
+  })
+);
   } catch (error: any) {
     if (error.name === "AbortError") {
       setLoading(false);
