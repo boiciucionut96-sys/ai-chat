@@ -43,7 +43,11 @@ export default function Home() {
         .eq("status", "active")
         .maybeSingle();
 
-      setIsPro(!!subscription);
+      if (data.user.email === "boiciucionut96@gmail.com") {
+  setIsPro(true);
+} else {
+  setIsPro(!!subscription);
+}
     });
 
     const {
@@ -52,8 +56,12 @@ export default function Home() {
       (_event, session) => {
         setUser(session?.user ?? null);
         if (!session?.user) {
-          setIsPro(false);
-        }
+  setIsPro(false);
+} else if (
+  session.user.email === "boiciucionut96@gmail.com"
+) {
+  setIsPro(true);
+}
       }
     );
 
