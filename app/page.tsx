@@ -20,10 +20,6 @@ type Message = {
 export default function Home() {
   const [user, setUser] = useState<any>(null);
 
-  useEffect(() => {
-    const savedChats = localStorage.getItem("chats");
-    // your existing localStorage code...
-  }, []);
 
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data, error }) => {
@@ -169,6 +165,40 @@ const currentChat =
     title: "",
     messages: [],
   };
+  useEffect(() => {
+  const loadMessages = async () => {
+    if (!user || !activeChatId) return;
+
+    const { data, error } = await supabase
+      .from("messages")
+      .select("*")
+      .eq("chat_id", activeChatId)
+      .order("created_at", {
+        ascending: true,
+      });
+
+    console.log("MESSAGES:", data);
+    console.log("MESSAGES ERROR:", error);
+
+    if (!data) return;
+
+    setChats((prev) =>
+      prev.map((chat) =>
+        chat.id === activeChatId
+          ? {
+              ...chat,
+              messages: data.map((msg) => ({
+                role: msg.role,
+                content: msg.content,
+              })),
+            }
+          : chat
+      )
+    );
+  };
+
+  loadMessages();
+}, [activeChatId, user]);
   const [loading, setLoading] = useState(false);
   const [abortController, setAbortController] =
   useState<AbortController | null>(null);
@@ -176,7 +206,7 @@ const currentChat =
   const chatContainerRef = useRef<HTMLElement | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
-  const renameChat = (id: string) => {
+  const renameChat = async (id: string) => {
   const newTitle = window.prompt("New chat title:");
 
   if (newTitle === null || newTitle.trim() === "") {
@@ -190,34 +220,77 @@ const currentChat =
         : chat
     )
   );
+  if (user) {
+  await supabase
+    .from("chats")
+    .update({
+      title: newTitle.trim(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+}
 };
 
-  // Load chats from localStorage
+  // Load chats
 useEffect(() => {
-  const savedChats = localStorage.getItem("chats");
-  const savedActiveChat = localStorage.getItem("activeChatId");
+  const loadChats = async () => {
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTop =
+        chatContainerRef.current.scrollHeight;
+    }
 
-   if (chatContainerRef.current) {
-    chatContainerRef.current.scrollTop =
-      chatContainerRef.current.scrollHeight;
-  }
-  if (savedChats) {
-    setChats(JSON.parse(savedChats));
-  } else {
-    const firstChat = {
-      id: crypto.randomUUID(),
-      title: "New Chat",
-      messages: [],
-    };
+    // Logged in -> Supabase
+    if (user) {
+      const { data, error } = await supabase
+        .from("chats")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("updated_at", {
+          ascending: false,
+        });
 
-    setChats([firstChat]);
-    setActiveChatId(firstChat.id);
-  }
+      console.log("CHATS:", data);
+      console.log("CHAT ERROR:", error);
 
-  if (savedActiveChat) {
-    setActiveChatId(savedActiveChat);
-  }
-}, []);
+      if (data && data.length > 0) {
+        const loadedChats = data.map((chat) => ({
+          id: chat.id,
+          title: chat.title,
+          messages: [],
+        }));
+
+        setChats(loadedChats);
+        setActiveChatId(loadedChats[0].id);
+        return;
+      }
+    }
+
+    // Guest -> localStorage
+    const savedChats =
+      localStorage.getItem("chats");
+    const savedActiveChat =
+      localStorage.getItem("activeChatId");
+
+    if (savedChats) {
+      setChats(JSON.parse(savedChats));
+    } else {
+      const firstChat = {
+        id: crypto.randomUUID(),
+        title: "New Chat",
+        messages: [],
+      };
+
+      setChats([firstChat]);
+      setActiveChatId(firstChat.id);
+    }
+
+    if (savedActiveChat) {
+      setActiveChatId(savedActiveChat);
+    }
+  };
+
+  loadChats();
+}, [user]);
 
 // Save chats
 useEffect(() => {
@@ -245,7 +318,13 @@ useEffect(() => {
   }
 }, [chats, activeChatId]);
 
-const deleteChat = (id: string) => {
+const deleteChat = async (id: string) => {
+  if (user) {
+  await supabase
+    .from("chats")
+    .delete()
+    .eq("id", id);
+}
     
   const remaining = chats.filter((chat) => chat.id !== id);
 
@@ -282,22 +361,32 @@ const sendMessage = async () => {
   }
 
   if (
-    currentChat.title === "New Chat" &&
-    userMessage.trim()
-  ) {
-    const title =
-      userMessage.length > 30
-        ? userMessage.slice(0, 30) + "..."
-        : userMessage;
+  currentChat.title === "New Chat" &&
+  userMessage.trim()
+) {
+  const title =
+    userMessage.length > 30
+      ? userMessage.slice(0, 30) + "..."
+      : userMessage;
 
-    setChats((prev) =>
-      prev.map((chat) =>
-        chat.id === activeChatId
-          ? { ...chat, title }
-          : chat
-      )
-    );
+  setChats((prev) =>
+    prev.map((chat) =>
+      chat.id === activeChatId
+        ? { ...chat, title }
+        : chat
+    )
+  );
+
+  if (user) {
+    await supabase
+      .from("chats")
+      .update({
+        title,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", activeChatId);
   }
+}
 
   const updatedMessages: Message[] = [
     ...currentChat.messages,
@@ -308,14 +397,24 @@ const sendMessage = async () => {
   ];
 
   setChats((prev) =>
-    prev.map((chat) =>
-      chat.id === activeChatId
-        ? { ...chat, messages: updatedMessages }
-        : chat
-    )
-  );
-  setMessage("");
-  setLoading(true);
+  prev.map((chat) =>
+    chat.id === activeChatId
+      ? { ...chat, messages: updatedMessages }
+      : chat
+  )
+);
+
+// ADD THIS
+if (user) {
+  await supabase.from("messages").insert({
+    chat_id: activeChatId,
+    role: "user",
+    content: userMessage,
+  });
+}
+
+setMessage("");
+setLoading(true);
 
   const controller = new AbortController();
   const formData = new FormData();
@@ -408,6 +507,13 @@ const sendMessage = async () => {
       };
     })
   );
+  }
+  if (user && assistantText.trim()) {
+  await supabase.from("messages").insert({
+    chat_id: activeChatId,
+    role: "assistant",
+    content: assistantText,
+  });
 }
 setChats((prev) =>
   prev.map((chat) => {
@@ -456,12 +562,29 @@ setChats((prev) =>
   }
 };
 
-  const newChat = () => {
+  const newChat = async () => {
+  let chatId = crypto.randomUUID();
+
+  if (user) {
+    const { data, error } = await supabase
+      .from("chats")
+      .insert({
+  user_id: user.id,
+  title: "New Chat",
+})
+      .select()
+      .single();
+
+    if (!error && data) {
+      chatId = data.id;
+    }
+  }
+
   const chat = {
-    id: crypto.randomUUID(),
-    title: `Chat ${chats.length + 1}`,
-    messages: [],
-  };
+  id: chatId,
+  title: "New Chat",
+  messages: [],
+};
 
   setChats((prev) => [...prev, chat]);
   setActiveChatId(chat.id);
