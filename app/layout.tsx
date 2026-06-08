@@ -1,4 +1,6 @@
 import "./globals.css";
+import { Analytics } from "@vercel/analytics/react";
+
 
 export const metadata = {
   title: "RazorswitchGPT",
@@ -12,7 +14,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>{children}</body>
-    </html>
+  <body>
+    {children}
+    <Analytics />
+  </body>
+</html>
   );
 }
