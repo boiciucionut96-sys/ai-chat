@@ -996,15 +996,30 @@ setChats((prev) =>
 
             <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
               <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                onChange={(e) => {
-                  const files = Array.from(e.target.files || []);
-                  setSelectedFiles((prev) => [...prev, ...files]);
-                }}
-                className="flex-1"
-              />
+  ref={fileInputRef}
+  type="file"
+  multiple
+  className="hidden"
+  onChange={(e) => {
+    const files =
+      Array.from(e.target.files || []);
+
+    setSelectedFiles((prev) => [
+      ...prev,
+      ...files,
+    ]);
+  }}
+/>
+
+<button
+  type="button"
+  onClick={() =>
+    fileInputRef.current?.click()
+  }
+  className="h-10 w-10 rounded-lg border border-zinc-700 hover:bg-zinc-800"
+>
+  📎
+</button>
 
               <textarea
                 className="w-full min-h-[88px] rounded-xl bg-[#303030] p-4 outline-none resize-none sm:flex-1"

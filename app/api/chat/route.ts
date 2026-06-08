@@ -11,6 +11,56 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
+async function extractMemory(
+  client: OpenAI,
+  message: string
+) {
+  try {
+    const result = await client.responses.create({
+      model: "gpt-5-nano",
+      input: `
+Determine whether the following message contains useful long-term user information.
+
+Examples of useful memories:
+- Name
+- Location
+- Job
+- Business/project
+- Goals
+- Preferences
+- Skills
+- Long-term interests
+
+Return ONLY valid JSON:
+
+{
+  "save": true,
+  "memory": "..."
+}
+
+or
+
+{
+  "save": false,
+  "memory": ""
+}
+
+Message:
+${message}
+`,
+    });
+
+    const text =
+      result.output_text?.trim() || "";
+
+    return JSON.parse(text);
+  } catch {
+    return {
+      save: false,
+      memory: "",
+    };
+  }
+}
 const PLAN_LIMITS = {
   free: {
     messages: 30,
@@ -47,6 +97,20 @@ export async function POST(req: Request) {
 
     const userId =
   (formData.get("userId") as string) || "";
+  let memoryText = "";
+
+if (userId) {
+  const { data: memories } =
+    await supabase
+      .from("memories")
+      .select("content")
+      .eq("user_id", userId);
+
+  memoryText =
+    memories
+      ?.map((m) => m.content)
+      .join("\n") || "";
+}
 
 if (!userId) {
   return Response.json(
@@ -77,12 +141,63 @@ let finalModel = "gpt-5-nano";
       : files;
 
     const inputMessages: any[] = [
-      {
-        role: "system",
-        content:
-          "You are a helpful AI assistant. Format all code using markdown code blocks.",
-      },
-    ];
+  {
+    role: "system",
+    content: `
+You are RazorswitchGPT, a highly capable AI assistant.
+
+Mission:
+Help users solve problems, learn, create, and make decisions with clear, accurate, and useful responses.
+
+Core priorities (highest to lowest):
+1. Accuracy
+2. Helpfulness
+3. Clarity
+4. Practicality
+5. Efficiency
+
+Behavior:
+- Answer directly before adding explanations.
+- Be concise by default.
+- Expand when the user requests detail.
+- Adapt to the user's skill level and context.
+- Explain complex topics in simple language when appropriate.
+- Think through difficult problems carefully.
+- Provide step-by-step guidance when useful.
+- Use examples when they improve understanding.
+- Admit uncertainty when information is incomplete.
+- Never invent facts, sources, memories, or experiences.
+- Use stored memories only when relevant to the user's request.
+- When a user's message contains important long-term preferences, goals, projects, personal background, or recurring interests, pay attention because it may be useful as future memory.
+
+Formatting:
+- Use markdown only when it improves readability.
+- Use code blocks for code.
+- Use headings and lists for longer answers.
+- Avoid excessive formatting for simple responses.
+
+Coding:
+- Produce clean, production-ready code when possible.
+- Explain important implementation decisions.
+- Consider performance, maintainability, and security.
+- Prefer modern best practices.
+
+Decision Making:
+- Compare options objectively.
+- Explain tradeoffs clearly.
+- Recommend the most practical solution based on the user's goals.
+
+Communication Style:
+- Professional, friendly, intelligent, and efficient.
+- Avoid unnecessary filler.
+- Avoid repeating the user's question.
+- Focus on delivering value quickly.
+
+User Memories:
+${memoryText}
+`,
+  },
+];
 
     if (uploadedFiles.length > 0) {
       inputMessages.push({
@@ -164,6 +279,57 @@ let finalModel = "gpt-5-nano";
         content: msg.content,
       }))
     );
+    const latestUserMessage =
+  messages[messages.length - 1]?.content;
+  if (
+  userId &&
+  latestUserMessage
+) {
+  const memoryCheck =
+    await extractMemory(
+      client,
+      latestUserMessage
+    );
+
+  console.log(
+    "MEMORY CHECK:",
+    memoryCheck
+  );
+
+  if (
+  memoryCheck.save &&
+  memoryCheck.memory
+) {
+  const { data: existing } =
+    await supabase
+      .from("memories")
+      .select("id")
+      .eq("user_id", userId)
+      .ilike(
+  "content",
+  `%${memoryCheck.memory}%`
+)
+      .maybeSingle();
+
+  if (!existing) {
+    await supabase
+      .from("memories")
+      .insert({
+        user_id: userId,
+        content: memoryCheck.memory,
+      });
+
+    console.log(
+      "NEW MEMORY SAVED:",
+      memoryCheck.memory
+    );
+  } else {
+    console.log(
+      "MEMORY ALREADY EXISTS"
+    );
+  }
+}
+}
 
     if (userId) {
       const { data: subscription } =
