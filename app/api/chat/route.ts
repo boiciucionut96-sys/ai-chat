@@ -139,9 +139,11 @@ let finalModel = "gpt-5-nano";
     const uploadedFiles = legacyFile
       ? [...files, legacyFile]
       : files;
+    
 
     const inputMessages: any[] = [
   {
+    
     role: "system",
     content: `
 You are RazorswitchGPT, a highly capable AI assistant.
@@ -343,6 +345,7 @@ ${memoryText}
       const plan =
   subscription?.plan?.toLowerCase() ||
   "free";
+  
 
       const today = new Date()
         .toISOString()
@@ -357,9 +360,31 @@ ${memoryText}
 
       const usage = usages?.[0];
 
-      const messagesToday =
-        usage?.messages_today ?? 0;
+const uploadsToday =
+  usage?.uploads_today ?? 0;
 
+const uploadLimit =
+  PLAN_LIMITS[
+    plan as keyof typeof PLAN_LIMITS
+  ].uploads;
+
+if (
+  uploadedFiles.length > 0 &&
+  uploadsToday + uploadedFiles.length >
+    uploadLimit
+) {
+  return Response.json(
+    {
+      error: `Upload limit reached (${uploadLimit} uploads).`,
+    },
+    {
+      status: 403,
+    }
+  );
+}
+
+const messagesToday =
+  usage?.messages_today ?? 0;
       const limit =
   PLAN_LIMITS[
     (plan in PLAN_LIMITS
@@ -391,21 +416,25 @@ console.log("LIMIT:", limit);
 
       if (usage) {
         await supabase
-          .from("usage_stats")
-          .update({
-            messages_today:
-              messagesToday + 1,
-          })
-          .eq("id", usage.id);
+  .from("usage_stats")
+  .update({
+    messages_today:
+      messagesToday + 1,
+
+    uploads_today:
+      (usage?.uploads_today ?? 0) +
+      uploadedFiles.length,
+  })
+  .eq("id", usage.id);
       } else {
         await supabase
-          .from("usage_stats")
-          .insert({
-            user_id: userId,
-            messages_today: 1,
-            uploads_today: 0,
-            usage_date: today,
-          });
+  .from("usage_stats")
+  .insert({
+    user_id: userId,
+    messages_today: 1,
+    uploads_today: uploadedFiles.length,
+    usage_date: today,
+  });
       }
     }
 
@@ -423,17 +452,14 @@ console.log("LIMIT:", limit);
       new ReadableStream({
         async start(controller) {
           for await (const event of stream) {
-            if (
-              event.type ===
-              "response.output_text.delta"
-            ) {
-              controller.enqueue(
-                encoder.encode(
-                  event.delta
-                )
-              );
-            }
-          }
+  if (
+    event.type === "response.output_text.delta"
+  ) {
+    controller.enqueue(
+      encoder.encode(event.delta)
+    );
+  }
+}
 
           controller.close();
         },

@@ -17,6 +17,28 @@ type Message = {
   content: string;
 };
 
+const PLAN_LIMITS = {
+  free: {
+    messages: 30,
+    uploads: 2,
+  },
+
+  go: {
+    messages: 300,
+    uploads: 10,
+  },
+
+  pro: {
+    messages: 1000,
+    uploads: 30,
+  },
+
+  builder: {
+    messages: Infinity,
+    uploads: Infinity,
+  },
+};
+
 export default function Home() {
   const [user, setUser] = useState<any>(null);
 
@@ -38,6 +60,26 @@ export default function Home() {
         .eq("user_id", data.user.id)
         .eq("status", "active")
         .maybeSingle();
+        const today = new Date()
+  .toISOString()
+  .split("T")[0];
+  console.log("USER:", data.user.id);
+
+const { data: usageData } = await supabase
+  .from("usage_stats")
+  .select("*")
+  .eq("user_id", data.user.id)
+  .order("usage_date", {
+    ascending: false,
+  })
+  .limit(1)
+  .maybeSingle();
+setUsage({
+  messages: usageData?.messages_today ?? 0,
+  uploads: usageData?.uploads_today ?? 0,
+});
+console.log("LOADED USAGE:", usageData);
+console.log("USAGE DATA:", usageData);
 
       if (data.user.email === "boiciucionut96@gmail.com") {
   setPlan("builder");
@@ -85,6 +127,10 @@ const [renameValue, setRenameValue] = useState("");
 const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
 const fileInputRef = useRef<HTMLInputElement | null>(null);
 const [plan, setPlan] = useState("free");
+const [usage, setUsage] = useState({
+  messages: 0,
+  uploads: 0,
+});
 
 const clearSelectedFiles = () => {
   setSelectedFiles([]);
@@ -104,18 +150,13 @@ const handleLogout = async () => {
 const handleUpgrade = async (
   plan: "go" | "pro" | "builder"
 ) => {
-  const res = await fetch(
-    "/api/create-checkout-session",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        plan,
-      }),
-    }
-  );
+  const res = await fetch("/api/create-checkout-session", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ plan }),
+  });
 
   const data = await res.json();
 
@@ -124,8 +165,44 @@ const handleUpgrade = async (
     return;
   }
 
+  await loadUsage();
+
   window.location.href = data.url;
 };
+  const loadUsage = async () => {
+    console.log("LOAD USAGE CALLED");
+  if (!user) return;
+
+  const today = new Date()
+    .toISOString()
+    .split("T")[0];
+
+  const { data, error } = await supabase
+  .from("usage_stats")
+  .select("*")
+  .eq("user_id", user.id)
+  .order("usage_date", {
+    ascending: false,
+  })
+  .limit(1)
+  .maybeSingle();
+
+console.log("USAGE ERROR:", error);
+console.log("USAGE DATA:", data);
+
+  if (data) {
+    setUsage({
+      messages: data.messages_today,
+      uploads: data.uploads_today,
+    });
+    console.log("SETTING USAGE:", {
+  messages: data.messages_today,
+  uploads: data.uploads_today,
+});
+  }
+};
+
+  
   
 
 const regenerateResponse = async () => {
@@ -494,16 +571,20 @@ setLoading(true);
       signal: controller.signal,
       body: formData,
     });
-    if (res.status === 401) {
-  alert("Please sign in first.");
-  return;
-}
+    if (!res.ok) {
+  const data = await res.json();
 
+  throw new Error(
+    data.error || "Request failed"
+  );
+}
+  
     const reader = res.body?.getReader();
 
     if (!reader) {
       throw new Error("No stream");
     }
+   console.log("test");
 
     let assistantText = "";
 
@@ -516,25 +597,21 @@ setLoading(true);
     ];
 
     setChats((prev) =>
-      prev.map((chat) =>
-        chat.id === activeChatId
-          ? {
-              ...chat,
-              title:
-                chat.messages.length <= 1
-                  ? (
-                      userMessage
-                        .replace(/\n/g, " ")
-                        .trim()
-                        .slice(0, 40) +
-                      (userMessage.length > 40 ? "..." : "")
-                    )
-                  : chat.title,
-              messages: streamingMessages,
-            }
-          : chat
-      )
-    );
+  prev.map((chat) =>
+    chat.id === activeChatId
+      ? {
+          ...chat,
+          messages: [
+            ...updatedMessages,
+            {
+              role: "assistant",
+              content: "",
+            },
+          ],
+        }
+      : chat
+  )
+);
 
     while (true) {
   const { done, value } = await reader.read();
@@ -586,7 +663,9 @@ setChats((prev) =>
   })
 );
   } catch (error: any) {
-    if (error.name === "AbortError") {
+  console.error("SEND ERROR:", error);
+
+  if (error.name === "AbortError") {
       setLoading(false);
       setAbortController(null);
       clearSelectedFiles();
@@ -771,15 +850,45 @@ setChats((prev) =>
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-2 text-sm text-zinc-300">
                   <span>{user.email}</span>
-                  {plan !== "free" ? (
-  <span className="rounded bg-yellow-600 px-2 py-1 text-xs font-bold uppercase">
+                 <div className="flex flex-col items-end">
+  <span
+    className={`rounded px-2 py-1 text-xs font-bold uppercase ${
+      plan === "free"
+        ? "bg-zinc-700"
+        : plan === "go"
+        ? "bg-blue-600"
+        : plan === "pro"
+        ? "bg-yellow-600"
+        : "bg-green-600"
+    }`}
+  >
     {plan}
   </span>
-) : (
-  <span className="rounded bg-zinc-700 px-2 py-1 text-xs">
-    FREE
+
+  <span className="text-[10px] text-zinc-400">
+    {usage.messages} /
+    {PLAN_LIMITS[
+      plan as keyof typeof PLAN_LIMITS
+    ].messages === Infinity
+      ? "∞"
+      : PLAN_LIMITS[
+          plan as keyof typeof PLAN_LIMITS
+        ].messages}
+    {" "}msgs
   </span>
-)}
+
+  <span className="text-[10px] text-zinc-400">
+    {usage.uploads} /
+    {PLAN_LIMITS[
+      plan as keyof typeof PLAN_LIMITS
+    ].uploads === Infinity
+      ? "∞"
+      : PLAN_LIMITS[
+          plan as keyof typeof PLAN_LIMITS
+        ].uploads}
+    {" "}uploads
+  </span>
+</div>
                 </div>
                 <button
                   onClick={handleLogout}
