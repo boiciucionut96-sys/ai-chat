@@ -11,6 +11,27 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
+const PLAN_LIMITS = {
+  free: {
+    messages: 30,
+    uploads: 2,
+  },
+
+  go: {
+    messages: 300,
+    uploads: 10,
+  },
+
+  pro: {
+    messages: 1000,
+    uploads: 30,
+  },
+
+  builder: {
+    messages: Infinity,
+    uploads: Infinity,
+  },
+};
 
 export async function POST(req: Request) {
   try {
@@ -153,7 +174,9 @@ let finalModel = "gpt-5-nano";
           .eq("status", "active")
           .maybeSingle();
 
-      const isPro = !!subscription;
+      const plan =
+  subscription?.plan?.toLowerCase() ||
+  "free";
 
       const today = new Date()
         .toISOString()
@@ -171,7 +194,14 @@ let finalModel = "gpt-5-nano";
       const messagesToday =
         usage?.messages_today ?? 0;
 
-      const limit = isPro ? 500 : 20;
+      const limit =
+  PLAN_LIMITS[
+    (plan in PLAN_LIMITS
+      ? plan
+      : "free") as keyof typeof PLAN_LIMITS
+  ].messages;
+  console.log("PLAN:", plan);
+console.log("LIMIT:", limit);
 
       console.log(
         "MESSAGES TODAY:",

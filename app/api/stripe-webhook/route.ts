@@ -53,7 +53,10 @@ export async function POST(req: Request) {
       "FOUND USER:",
       user?.id
     );
-
+console.log(
+  "SESSION:",
+  JSON.stringify(session, null, 2)
+);
     const { error } = await supabase
   .from("subscriptions")
   .upsert(
@@ -61,7 +64,7 @@ export async function POST(req: Request) {
       user_id: user?.id ?? null,
       stripe_customer_id: session.customer,
       stripe_subscription_id: session.subscription,
-      plan: "Pro",
+      plan: session.metadata?.plan || "free",
       status: "active",
     },
     {

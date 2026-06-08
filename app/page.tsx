@@ -99,25 +99,30 @@ const handleLogout = async () => {
   window.location.reload();
 };
 
-const handleUpgrade = async () => {
+const handleUpgrade = async (
+  plan: "go" | "pro" | "builder"
+) => {
   const res = await fetch(
     "/api/create-checkout-session",
     {
       method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        plan,
+      }),
     }
   );
 
-  if (!res.ok) {
   const data = await res.json();
 
-  alert(
-    data.error ||
-      "Daily limit reached"
-  );
+  if (!res.ok) {
+    alert(data.error || "Checkout failed");
+    return;
+  }
 
-  setLoading(false);
-  return;
-}
+  window.location.href = data.url;
 };
   
 
@@ -751,12 +756,28 @@ setChats((prev) =>
             )}
 
             {!isPro && (
-              <button
-                onClick={handleUpgrade}
-                className="bg-blue-600 px-3 py-1 rounded"
-              >
-                Upgrade
-              </button>
+              <div className="flex gap-2">
+  <button
+    onClick={() => handleUpgrade("go")}
+    className="bg-blue-600 px-3 py-1 rounded"
+  >
+    Go
+  </button>
+
+  <button
+    onClick={() => handleUpgrade("pro")}
+    className="bg-purple-600 px-3 py-1 rounded"
+  >
+    Pro
+  </button>
+
+  <button
+    onClick={() => handleUpgrade("builder")}
+    className="bg-emerald-600 px-3 py-1 rounded"
+  >
+    Builder
+  </button>
+</div>
             )}
           </div>
         </header>
