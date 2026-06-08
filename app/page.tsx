@@ -40,9 +40,11 @@ export default function Home() {
         .maybeSingle();
 
       if (data.user.email === "boiciucionut96@gmail.com") {
-  setIsPro(true);
+  setPlan("builder");
 } else {
-  setIsPro(!!subscription);
+  setPlan(
+    subscription?.plan?.toLowerCase() || "free"
+  );
 }
     });
 
@@ -52,11 +54,11 @@ export default function Home() {
       (_event, session) => {
         setUser(session?.user ?? null);
         if (!session?.user) {
-  setIsPro(false);
+  setPlan("free");
 } else if (
   session.user.email === "boiciucionut96@gmail.com"
 ) {
-  setIsPro(true);
+  setPlan("builder");
 }
       }
     );
@@ -82,7 +84,7 @@ const [renamingChatId, setRenamingChatId] = useState<string | null>(null);
 const [renameValue, setRenameValue] = useState("");
 const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
 const fileInputRef = useRef<HTMLInputElement | null>(null);
-const [isPro, setIsPro] = useState(false);
+const [plan, setPlan] = useState("free");
 
 const clearSelectedFiles = () => {
   setSelectedFiles([]);
@@ -258,13 +260,26 @@ useEffect(() => {
       console.log("CHAT ERROR:", error);
 
       if (data && data.length > 0) {
+        console.log("LOAD CHATS RUNNING");
   const loadedChats = data.map((chat) => ({
     id: chat.id,
     title: chat.title,
     messages: [],
   }));
 
-  setChats(loadedChats);
+  setChats((prev) =>
+  loadedChats.map((chat) => {
+    const existing = prev.find(
+      (c) => c.id === chat.id
+    );
+
+    return {
+      ...chat,
+      messages:
+        existing?.messages || [],
+    };
+  })
+);
   setActiveChatId(loadedChats[0].id);
   return;
 }
@@ -743,7 +758,7 @@ setChats((prev) =>
               onChange={(e) => setModel(e.target.value)}
               className="rounded bg-zinc-800 px-3 py-1 text-sm"
             >
-              {isPro && (
+              {plan !== "free" && (
                 <>
                   <option value="gpt-5">GPT-5</option>
                   <option value="gpt-5-mini">GPT-5 Mini</option>
@@ -756,15 +771,15 @@ setChats((prev) =>
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-2 text-sm text-zinc-300">
                   <span>{user.email}</span>
-                  {isPro ? (
-                    <span className="rounded bg-yellow-600 px-2 py-1 text-xs font-bold">
-                      PRO
-                    </span>
-                  ) : (
-                    <span className="rounded bg-zinc-700 px-2 py-1 text-xs">
-                      FREE
-                    </span>
-                  )}
+                  {plan !== "free" ? (
+  <span className="rounded bg-yellow-600 px-2 py-1 text-xs font-bold uppercase">
+    {plan}
+  </span>
+) : (
+  <span className="rounded bg-zinc-700 px-2 py-1 text-xs">
+    FREE
+  </span>
+)}
                 </div>
                 <button
                   onClick={handleLogout}
@@ -782,7 +797,7 @@ setChats((prev) =>
               </button>
             )}
 
-            {!isPro && (
+            {plan === "free" && (
               <div className="flex gap-2">
   <button
     onClick={() => handleUpgrade("go")}
