@@ -258,16 +258,43 @@ useEffect(() => {
       console.log("CHAT ERROR:", error);
 
       if (data && data.length > 0) {
-        const loadedChats = data.map((chat) => ({
-          id: chat.id,
-          title: chat.title,
-          messages: [],
-        }));
+  const loadedChats = data.map((chat) => ({
+    id: chat.id,
+    title: chat.title,
+    messages: [],
+  }));
 
-        setChats(loadedChats);
-        setActiveChatId(loadedChats[0].id);
-        return;
-      }
+  setChats(loadedChats);
+  setActiveChatId(loadedChats[0].id);
+  return;
+}
+
+// NO CHATS FOUND -> create first chat in Supabase
+const { data: newChat, error: createError } =
+  await supabase
+    .from("chats")
+    .insert({
+      user_id: user.id,
+      title: "New Chat",
+    })
+    .select()
+    .single();
+
+console.log("CREATED CHAT:", newChat);
+console.log("CREATE ERROR:", createError);
+
+if (newChat) {
+  setChats([
+    {
+      id: newChat.id,
+      title: newChat.title,
+      messages: [],
+    },
+  ]);
+
+  setActiveChatId(newChat.id);
+  return;
+}
     }
 
     // Guest -> localStorage
