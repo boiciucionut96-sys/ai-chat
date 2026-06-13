@@ -13,8 +13,10 @@ type Chat = {
 };
 
 type Message = {
-  role: "user" | "assistant";
+  role: string;
   content: string;
+  image?: string;
+  type?: string;
 };
 
 const PLAN_LIMITS = {
@@ -116,6 +118,7 @@ console.log("USAGE DATA:", usageData);
   setAbortController(null);
 };
   const [message, setMessage] = useState("");
+    const [imageLoading, setImageLoading] = useState(false);
   const [chats, setChats] = useState<Chat[]>([]); 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -693,6 +696,52 @@ setChats((prev) =>
     clearSelectedFiles();
   }
 };
+const generateImage = async () => {
+  
+  try {
+    setImageLoading(true);
+    const res = await fetch("/api/image", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        prompt: message,
+      }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      alert(data.error);
+      return;
+    }
+
+    setChats((prev) =>
+  prev.map((chat) =>
+    chat.id === activeChatId
+      ? {
+          ...chat,
+          messages: [
+            ...chat.messages,
+            {
+              role: "assistant",
+              content: "",
+              image: data.image,
+              type: "image",
+            },
+          ],
+        }
+      : chat
+  )
+);
+setImageLoading(false);
+  
+  } catch (error) {
+  console.error(error);
+  setImageLoading(false);
+}
+};
 
   const newChat = async () => {
   let chatId = crypto.randomUUID();
@@ -994,30 +1043,50 @@ setChats((prev) =>
                       </div>
                     ) : (
                       <div className="prose prose-invert max-w-none">
-                        <ReactMarkdown
-                          remarkPlugins={[remarkGfm]}
-                          components={{
-                            code({ className, children, ...props }: any) {
-                              const match = /language-(\w+)/.exec(className || "");
-                              return match ? (
-                                <SyntaxHighlighter
-                                  style={oneDark}
-                                  language={match[1]}
-                                  PreTag="div"
-                                  {...props}
-                                >
-                                  {String(children).replace(/\n$/, "")}
-                                </SyntaxHighlighter>
-                              ) : (
-                                <code className={className} {...props}>
-                                  {children}
-                                </code>
-                              );
-                            },
-                          }}
-                        >
-                          {msg.content}
-                        </ReactMarkdown>
+                        {msg.type === "image" ? (
+  <div className="space-y-2">
+    <img
+      src={`data:image/png;base64,${msg.image}`}
+      alt="Generated image"
+      className="rounded-xl max-w-full"
+    />
+
+    <a
+      href={`data:image/png;base64,${msg.image}`}
+      download="generated-image.png"
+      className="inline-block px-3 py-1 rounded bg-blue-600 text-white"
+    >
+      Download
+    </a>
+  </div>
+) : (
+
+  <ReactMarkdown
+    remarkPlugins={[remarkGfm]}
+    components={{
+      code({ className, children, ...props }: any) {
+        const match = /language-(\w+)/.exec(className || "");
+
+        return match ? (
+          <SyntaxHighlighter
+            style={oneDark}
+            language={match[1]}
+            PreTag="div"
+            {...props}
+          >
+            {String(children).replace(/\n$/, "")}
+          </SyntaxHighlighter>
+        ) : (
+          <code className={className} {...props}>
+            {children}
+          </code>
+        );
+      },
+    }}
+  >
+    {msg.content}
+  </ReactMarkdown>
+)}
                       </div>
                     )}
 
@@ -1130,10 +1199,11 @@ setChats((prev) =>
   📎
 </button>
 
+
               <textarea
                 className="w-full min-h-[88px] rounded-xl bg-[#303030] p-4 outline-none resize-none sm:flex-1"
                 placeholder="Message AI Chat..."
-                value={message}
+                value={message} 
                 rows={2}
                 onChange={(e) => setMessage(e.target.value)}
                 onKeyDown={(e) => {
@@ -1152,12 +1222,28 @@ setChats((prev) =>
                   Stop
                 </button>
               ) : (
-                <button
-                  onClick={sendMessage}
-                  className="rounded-lg bg-blue-600 px-4 hover:bg-blue-700"
-                >
-                  Send
-                </button>
+                <>
+  <button
+    onClick={sendMessage}
+    className="rounded-lg bg-blue-600 px-4 hover:bg-blue-700"
+  >
+    Send
+  </button>
+
+  <button
+    onClick={generateImage}
+    disabled={imageLoading}
+    className="rounded-lg bg-purple-600 px-4 hover:bg-purple-700"
+  >
+    {imageLoading ? "Generating..." : "🖼 Image"}
+  </button>
+
+  {imageLoading && (
+    <div className="text-sm text-zinc-400 mt-2">
+      Creating image... this may take 30-40 seconds.
+    </div>
+  )}
+</>
               )}
             </div>
           </div>
