@@ -707,6 +707,10 @@ setChats((prev) =>
   }
 };
 const generateImage = async () => {
+  if (usage.images >= currentLimits.images) {
+  alert("Daily image limit reached. Upgrade your plan.");
+  return;
+}
   
   try {
     setImageLoading(true);
@@ -716,8 +720,9 @@ const generateImage = async () => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        prompt: message,
-      }),
+  prompt: message,
+  userId: user?.id,
+}),
     });
 
     const data = await res.json();
@@ -745,6 +750,12 @@ const generateImage = async () => {
       : chat
   )
 );
+
+setUsage((prev) => ({
+  ...prev,
+  images: prev.images + 1,
+}));
+
 setImageLoading(false);
   
   } catch (error) {
