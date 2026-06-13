@@ -23,21 +23,25 @@ const PLAN_LIMITS = {
   free: {
     messages: 30,
     uploads: 2,
+    images: 0,
   },
 
   go: {
     messages: 300,
     uploads: 10,
+    images: 10,
   },
 
   pro: {
     messages: 1000,
     uploads: 30,
+    images: 50,
   },
 
   builder: {
     messages: Infinity,
     uploads: Infinity,
+    images: Infinity,
   },
 };
 
@@ -79,6 +83,7 @@ const { data: usageData } = await supabase
 setUsage({
   messages: usageData?.messages_today ?? 0,
   uploads: usageData?.uploads_today ?? 0,
+  images: usageData?.images_today ?? 0,
 });
 console.log("LOADED USAGE:", usageData);
 console.log("USAGE DATA:", usageData);
@@ -130,9 +135,12 @@ const [renameValue, setRenameValue] = useState("");
 const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
 const fileInputRef = useRef<HTMLInputElement | null>(null);
 const [plan, setPlan] = useState("free");
+const currentLimits =
+  PLAN_LIMITS[plan as keyof typeof PLAN_LIMITS];
 const [usage, setUsage] = useState({
   messages: 0,
   uploads: 0,
+  images: 0,
 });
 
 const clearSelectedFiles = () => {
@@ -195,12 +203,14 @@ console.log("USAGE DATA:", data);
 
   if (data) {
     setUsage({
-      messages: data.messages_today,
-      uploads: data.uploads_today,
-    });
+  messages: data.messages_today ?? 0,
+  uploads: data.uploads_today ?? 0,
+  images: data.images_today ?? 0,
+});
     console.log("SETTING USAGE:", {
   messages: data.messages_today,
   uploads: data.uploads_today,
+  images: data.images_today,
 });
   }
 };
@@ -915,28 +925,24 @@ setImageLoading(false);
   </span>
 
   <span className="text-[10px] text-zinc-400">
-    {usage.messages} /
-    {PLAN_LIMITS[
-      plan as keyof typeof PLAN_LIMITS
-    ].messages === Infinity
-      ? "∞"
-      : PLAN_LIMITS[
-          plan as keyof typeof PLAN_LIMITS
-        ].messages}
-    {" "}msgs
-  </span>
+  {usage.messages} / ... msgs
+</span>
 
-  <span className="text-[10px] text-zinc-400">
-    {usage.uploads} /
-    {PLAN_LIMITS[
-      plan as keyof typeof PLAN_LIMITS
-    ].uploads === Infinity
-      ? "∞"
-      : PLAN_LIMITS[
-          plan as keyof typeof PLAN_LIMITS
-        ].uploads}
-    {" "}uploads
-  </span>
+<span className="text-[10px] text-zinc-400">
+  {usage.uploads} / ... uploads
+</span>
+
+<span className="text-[10px] text-zinc-400">
+  {usage.images} /
+  {PLAN_LIMITS[
+    plan as keyof typeof PLAN_LIMITS
+  ].images === Infinity
+    ? "∞"
+    : PLAN_LIMITS[
+        plan as keyof typeof PLAN_LIMITS
+      ].images}
+  images
+</span>
 </div>
                 </div>
                 <button
