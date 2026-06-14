@@ -17,6 +17,7 @@ type Message = {
   content: string;
   image?: string;
   type?: string;
+  audio?: string;
 };
 
 const PLAN_LIMITS = {
@@ -24,24 +25,28 @@ const PLAN_LIMITS = {
     messages: 30,
     uploads: 2,
     images: 0,
+    music: 0,
   },
 
   go: {
     messages: 300,
     uploads: 10,
     images: 10,
+    music: 5,
   },
 
   pro: {
     messages: 1000,
     uploads: 30,
-    images: 50,
+    images: 30,
+    music: 20,
   },
 
   builder: {
     messages: Infinity,
     uploads: Infinity,
     images: Infinity,
+    music: Infinity,
   },
 };
 
@@ -84,6 +89,7 @@ setUsage({
   messages: usageData?.messages_today ?? 0,
   uploads: usageData?.uploads_today ?? 0,
   images: usageData?.images_today ?? 0,
+  music: usageData?.music_today ?? 0,
 });
 console.log("LOADED USAGE:", usageData);
 console.log("USAGE DATA:", usageData);
@@ -124,6 +130,7 @@ console.log("USAGE DATA:", usageData);
 };
   const [message, setMessage] = useState("");
     const [imageLoading, setImageLoading] = useState(false);
+    const [musicLoading, setMusicLoading] = useState(false);
   const [chats, setChats] = useState<Chat[]>([]); 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -141,7 +148,9 @@ const [usage, setUsage] = useState({
   messages: 0,
   uploads: 0,
   images: 0,
+  music: 0,
 });
+
 
 const clearSelectedFiles = () => {
   setSelectedFiles([]);
@@ -206,11 +215,13 @@ console.log("USAGE DATA:", data);
   messages: data.messages_today ?? 0,
   uploads: data.uploads_today ?? 0,
   images: data.images_today ?? 0,
+  music: data.music_today ?? 0,
 });
     console.log("SETTING USAGE:", {
   messages: data.messages_today,
   uploads: data.uploads_today,
   images: data.images_today,
+  music: data.music_today,
 });
   }
 };
@@ -285,9 +296,12 @@ const currentChat =
           ? {
               ...chat,
               messages: data.map((msg) => ({
-                role: msg.role,
-                content: msg.content,
-              })),
+  role: msg.role,
+  content: msg.content,
+  type: msg.type,
+  image: msg.image,
+  audio: msg.audio,
+}))
             }
           : chat
       )
@@ -317,6 +331,7 @@ const currentChat =
         : chat
     )
   );
+  
   if (user) {
   await supabase
     .from("chats")
@@ -493,7 +508,12 @@ const deleteChat = async (id: string) => {
 };
 
 const sendMessage = async () => {
-  if ((!message.trim() && selectedFiles.length === 0) || loading) return;
+  if (!user) {
+    alert("Please sign in to use RazorswitchGPT.");
+    return;
+  }
+
+  // rest of sendMessage code...
 
   let userMessage = message;
 
@@ -588,7 +608,7 @@ setLoading(true);
   const data = await res.json();
 
   throw new Error(
-    data.error || "Request failed"
+    data.error || "Please sign in to use RazorswitchGPT"
   );
 }
   
@@ -689,7 +709,7 @@ setChats((prev) =>
       ...updatedMessages,
       {
         role: "assistant" as const,
-        content: "Error contacting server.",
+        content: "Please sign in to use RazorswitchGPT.",
       },
     ];
 
@@ -707,6 +727,10 @@ setChats((prev) =>
   }
 };
 const generateImage = async () => {
+   if (!user) {
+    alert("Please sign in to generate images.");
+    return;
+  }
   if (usage.images >= currentLimits.images) {
   alert("Daily image limit reached. Upgrade your plan.");
   return;
@@ -762,6 +786,102 @@ setImageLoading(false);
   console.error(error);
   setImageLoading(false);
 }
+};
+const generateMusic = async () => {
+  if (!user) {
+    alert("Please sign in to generate music.");
+    return;
+  }
+  try {
+    setMusicLoading(true);
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    const response = await fetch("/api/music", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        prompt: message,
+        userId: user?.id,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      alert(error.error);
+      return;
+    }
+
+    const blob = await response.blob();
+
+const fileName = `${crypto.randomUUID()}.mp3`;
+
+const { error: uploadError } =
+  await supabase.storage
+    .from("music")
+    .upload(fileName, blob, {
+      contentType: "audio/mpeg",
+    });
+
+if (uploadError) {
+  throw new Error(uploadError.message);
+}
+
+const { data: publicData } =
+  supabase.storage
+    .from("music")
+    .getPublicUrl(fileName);
+
+const audioUrl = publicData.publicUrl;
+    if (user) {
+  const { error } = await supabase
+  .from("messages")
+  .insert({
+    chat_id: activeChatId,
+    role: "assistant",
+    content: "🎵 Generated Music",
+    type: "music",
+    audio: audioUrl,
+  });
+
+if (error) {
+  console.error("Music save failed:", error);
+}
+}
+    setChats((prev) =>
+  prev.map((chat) =>
+    chat.id === activeChatId
+      ? {
+          ...chat,
+          messages: [
+            ...chat.messages,
+            {
+              role: "assistant",
+              content: "🎵 Generated Music",
+              type: "music",
+              audio: audioUrl,
+            },
+          ],
+        }
+      : chat
+  )
+);
+
+setUsage((prev) => ({
+  ...prev,
+  music: prev.music + 1,
+}));
+
+   
+  } catch (error: any) {
+    alert(error.message);
+  } finally {
+    setMusicLoading(false);
+  }
 };
 
   const newChat = async () => {
@@ -819,9 +939,11 @@ setImageLoading(false);
 
           <div className="mt-4 space-y-2">
             {chats
-              .filter((chat) =>
-                chat.title.toLowerCase().includes(search.toLowerCase())
-              )
+              .filter(
+  (chat) =>
+    chat?.title &&
+    chat.title.toLowerCase().includes(search.toLowerCase())
+)
               .map((chat) => (
                 <div key={chat.id} className="flex gap-2">
                   <button
@@ -954,6 +1076,19 @@ setImageLoading(false);
       ].images}
   images
 </span>
+
+<span className="text-[10px] text-zinc-400">
+  {usage.music} /
+  {PLAN_LIMITS[
+    plan as keyof typeof PLAN_LIMITS
+  ].music === Infinity
+    ? "∞"
+    : PLAN_LIMITS[
+        plan as keyof typeof PLAN_LIMITS
+      ].music}
+  music
+</span>
+
 </div>
                 </div>
                 <button
@@ -1074,6 +1209,20 @@ setImageLoading(false);
       className="inline-block px-3 py-1 rounded bg-blue-600 text-white"
     >
       Download
+    </a>
+  </div>
+) : msg.type === "music" ? (
+  <div className="space-y-2">
+    <audio controls className="w-full">
+      <source src={msg.audio} type="audio/mpeg" />
+    </audio>
+
+    <a
+      href={msg.audio}
+      download="music.mp3"
+      className="inline-block px-3 py-1 rounded bg-green-600 text-white"
+    >
+      Download Music
     </a>
   </div>
 ) : (
@@ -1254,12 +1403,24 @@ setImageLoading(false);
   >
     {imageLoading ? "Generating..." : "🖼 Image"}
   </button>
+ <button
+  onClick={generateMusic}
+  disabled={musicLoading}
+  className="rounded-lg bg-green-600 px-4 hover:bg-green-700 disabled:opacity-50"
+>
+  {musicLoading ? "Generating..." : "🎵 Music"}
+</button>
 
   {imageLoading && (
     <div className="text-sm text-zinc-400 mt-2">
       Creating image... this may take 30-40 seconds.
     </div>
   )}
+  {musicLoading && (
+  <div className="text-sm text-zinc-400 mt-2">
+    Generating music... this may take 10-30 seconds.
+  </div>
+)}
 </>
               )}
             </div>

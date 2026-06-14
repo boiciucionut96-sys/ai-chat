@@ -17,11 +17,16 @@ export async function POST(req: Request) {
     const { prompt, userId } = await req.json();
 
     if (!userId) {
-      return Response.json(
-        { error: "Missing user ID" },
-        { status: 401 }
-      );
+  return Response.json(
+    {
+      error:
+        "Please sign in to generate images.",
+    },
+    {
+      status: 401,
     }
+  );
+}
 
     const today = new Date().toISOString().split("T")[0];
 
